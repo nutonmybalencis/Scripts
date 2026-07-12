@@ -354,9 +354,6 @@ local function isLingering()
 	return lingerState.active and os.clock() < lingerState.endTime
 end
 
--- Load whitelist on startup
-task.defer(loadWhitelist)
-
 -- ==================== CONFIG ====================
 local cfg = {
 	enabled = true,
@@ -526,6 +523,81 @@ local selectedDistanceHitchancePoint = 1
 local syncingDistanceHitchanceEditor = false
 local storedAimMaxDistanceBeforeDistanceHitchance = tonumber(cfg.aimmaxdist) or 0
 local distanceHitchanceForcesAimMaxDistance = false
+
+-- Pre-declare all UI elements to prevent nil errors
+uiElements = {
+    SilentAimToggle = nil,
+    TeamCheckToggle = nil,
+    WallCheckToggle = nil,
+    DeathCheckToggle = nil,
+    VehicleCheckToggle = nil,
+    HostileCheckToggle = nil,
+    TrespassCheckToggle = nil,
+    CriminalsSkipInmatesToggle = nil,
+    InmatesSkipCriminalsToggle = nil,
+    FFCheckToggle = nil,
+    ShieldBreakerToggle = nil,
+    ShieldFrontAngleSlider = nil,
+    ShieldRandomHeadToggle = nil,
+    ShieldHeadChanceSlider = nil,
+    TaserBypassHostileToggle = nil,
+    TaserBypassTrespassToggle = nil,
+    TaserAlwaysHitToggle = nil,
+    HitIfPlayerStillToggle = nil,
+    StillThresholdSlider = nil,
+    HitChanceSlider = nil,
+    HitChanceAutoOnlyToggle = nil,
+    DistanceBasedHitChanceToggle = nil,
+    DistanceHitchancePointDropdown = nil,
+    AimMaxDistSlider = nil,
+    MissSpreadSlider = nil,
+    ShotgunNaturalSpreadToggle = nil,
+    ShotgunGameHandledToggle = nil,
+    PrioritizeClosestToggle = nil,
+    PrioritizeCriminalsToggle = nil,
+    TargetStickinessToggle = nil,
+    StickinessDurationSlider = nil,
+    TargetStickinessRandomToggle = nil,
+    TargetStickinessMinSlider = nil,
+    TargetStickinessMaxSlider = nil,
+    FovSlider = nil,
+    ShowFovToggle = nil,
+    StaticFovToggle = nil,
+    ShowTargetLineToggle = nil,
+    AimPartDropdown = nil,
+    RandomPartsToggle = nil,
+    EspToggle = nil,
+    EspTeamCheckToggle = nil,
+    ShowTeamToggle = nil,
+    EspMaxDistanceSlider = nil,
+    ShowDistanceToggle = nil,
+    UseTeamColorsToggle = nil,
+    EspColorPicker = nil,
+    GuardsColorPicker = nil,
+    InmatesColorPicker = nil,
+    CriminalsColorPicker = nil,
+    TeamColorPicker = nil,
+    C4EspToggle = nil,
+    C4EspMaxDistanceSlider = nil,
+    C4ShowDistanceToggle = nil,
+    C4EspColorPicker = nil,
+    AutoshootToggle = nil,
+    AutoshootWeaponDropdown = nil,
+    AutoshootDelaySlider = nil,
+    AutoshootStartDelaySlider = nil,
+    AutoGrabToggle = nil,
+    AutoGrabDistanceSlider = nil,
+    AutoGrabDelaySlider = nil,
+    AutoGrabKeycardToggle = nil,
+    AutoGrabM9Toggle = nil,
+    WhitelistEnabledToggle = nil,
+    WhitelistModeDropdown = nil,
+    WhitelistPlayerDropdown = nil,
+    WhitelistInput = nil,
+    SelectedDistancePointDistanceSlider = nil,
+    SelectedDistancePointHitchanceSlider = nil,
+    -- Add any others you use
+}
 
 local function formatDistanceHitchanceNumber(value)
 	if math.abs(value - math.floor(value)) < 0.001 then
@@ -2015,10 +2087,13 @@ local function autoShoot()
         stopLinger()
         return 
     end
+    
+    -- FIXED: This was the error line
     if not gun.Parent or gun.Parent \~= LocalPlayer.Character then 
         stopLinger()
         return 
     end
+    
     if not gunMatchesAutoShootWeapon(gun) then
         lastAutoTarget = nil
         stopLinger()
@@ -2038,167 +2113,156 @@ local function autoShoot()
         return 
     end
 
-	local muzzle = currentGun:FindFirstChild("Muzzle")
-	local startPos = muzzle and muzzle.Position or myHead.Position
+    local muzzle = currentGun:FindFirstChild("Muzzle")
+    local startPos = muzzle and muzzle.Position or myHead.Position
 
-	local target, targetPos = getClosest(cfg.fov)
-	local targetIsValid = target and fullCheck(target)
-	local targetPart = target and getTargetPart(target.Character)
+    local target, targetPos = getClosest(cfg.fov)
+    local targetIsValid = target and fullCheck(target)
+    local targetPart = target and getTargetPart(target.Character)
 
-	-- If we have a valid target, update linger state and proceed normally
-	if targetIsValid and targetPart then
-		-- Start new linger if target changed or first valid target
-		if target ~= lingerState.lastValidTarget then
-			startLinger(target, targetPart.Position, gun)
-		else
-			-- Update linger tracking for same target
-			lingerState.lastValidTargetPos = targetPart.Position
-			lingerState.lastValidGun = gun
-			lingerState.endTime = now + rng:NextNumber(0.05, 1.0)
-		end
-		
-		lastAutoTarget = target
-		targetAcquiredTime = now
-		
-	-- If target became invalid but we're lingering, use last known position
-	elseif isLingering() and lingerState.lastValidTargetPos and lingerState.lastValidGun == gun then
-		targetPos = lingerState.lastValidTargetPos
-		targetPart = {
-			Position = lingerState.lastValidTargetPos,
-			Name = cfg.aimpart
-		}
-		-- Create a fake target reference for the rest of the function
-		target = lingerState.lastValidTarget
-		
-	-- No valid target and not lingering (or linger expired)
-	else
-		stopLinger()
-		lastAutoTarget = nil
-		return 
-	end
+    -- If we have a valid target, update linger state and proceed normally
+    if targetIsValid and targetPart then
+        if target \~= lingerState.lastValidTarget then
+            startLinger(target, targetPart.Position, gun)
+        else
+            lingerState.lastValidTargetPos = targetPart.Position
+            lingerState.lastValidGun = gun
+            lingerState.endTime = now + rng:NextNumber(0.05, 1.0)
+        end
+        
+        lastAutoTarget = target
+        targetAcquiredTime = now
+        
+    elseif isLingering() and lingerState.lastValidTargetPos and lingerState.lastValidGun == gun then
+        targetPos = lingerState.lastValidTargetPos
+        targetPart = {
+            Position = lingerState.lastValidTargetPos,
+            Name = cfg.aimpart
+        }
+        target = lingerState.lastValidTarget
+    else
+        stopLinger()
+        lastAutoTarget = nil
+        return 
+    end
 
-	-- Check if linger expired this frame
-	if lingerState.active and now >= lingerState.endTime then
-		stopLinger()
-		if not targetIsValid then
-			lastAutoTarget = nil
-			return
-		end
-	end
+    if lingerState.active and now >= lingerState.endTime then
+        stopLinger()
+        if not targetIsValid then
+            lastAutoTarget = nil
+            return
+        end
+    end
 
-	-- Target acquisition delay check (skip if lingering)
-	if not isLingering() then
-		if target ~= lastAutoTarget then
-			targetAcquiredTime = now
-			lastAutoTarget = target
-		end
+    if not isLingering() then
+        if target \~= lastAutoTarget then
+            targetAcquiredTime = now
+            lastAutoTarget = target
+        end
 
-		local acquireDelay = shouldUseInstantAcquireDelay(gun) and 0 or cfg.autoshootstartdelay
-		local requiredDelay = math.max(acquireDelay, gun:GetAttribute("ChargeTime") or 0)
-		if now - targetAcquiredTime < requiredDelay then return end
-	end
+        local acquireDelay = shouldUseInstantAcquireDelay(gun) and 0 or cfg.autoshootstartdelay
+        local requiredDelay = math.max(acquireDelay, gun:GetAttribute("ChargeTime") or 0)
+        if now - targetAcquiredTime < requiredDelay then return end
+    end
 
-	-- Use actual target part if available, otherwise use linger position
-	if targetIsValid and target.Character then
-		targetPart = getTargetPart(target.Character)
-		if not targetPart then 
-			stopLinger()
-			return 
-		end
-	end
+    if targetIsValid and target.Character then
+        targetPart = getTargetPart(target.Character)
+        if not targetPart then 
+            stopLinger()
+            return 
+        end
+    end
 
-	local weaponRange = gun:GetAttribute("Range")
-	if weaponRange and (targetPart.Position - startPos).Magnitude > weaponRange + 5 then
-		return
-	end
+    local weaponRange = gun:GetAttribute("Range")
+    if weaponRange and (targetPart.Position - startPos).Magnitude > weaponRange + 5 then
+        return
+    end
 
-	local ammo = gun:GetAttribute("Local_CurrentAmmo") or gun:GetAttribute("CurrentAmmo") or 0
-	if ammo <= 0 then
-		requestReload(gun)
-		return
-	end
+    local ammo = gun:GetAttribute("Local_CurrentAmmo") or gun:GetAttribute("CurrentAmmo") or 0
+    if ammo <= 0 then
+        requestReload(gun)
+        return
+    end
 
-	lastAutoShoot = now
+    lastAutoShoot = now
 
-	local isTaser = isTaserGun(gun)
-	local sniper = isSniper(gun)
-	local shotgun = isShotgun(gun)
-	local shouldHit = false
+    local isTaser = isTaserGun(gun)
+    local sniper = isSniper(gun)
+    local shotgun = isShotgun(gun)
+    local shouldHit = false
 
-	-- During linger, force hit (they were valid when we started tracking)
-	if isLingering() then
-		shouldHit = true
-	elseif cfg.taseralwayshit and isTaser then
-		shouldHit = true
-	elseif cfg.ifplayerstill and target and isStanding(target) then
-		shouldHit = true
-	elseif shouldBypassHitchance(gun) then
-		shouldHit = true
-	else
-		shouldHit = rollHit(getDistanceBasedHitChance(targetPart, startPos))
-	end
+    if isLingering() then
+        shouldHit = true
+    elseif cfg.taseralwayshit and isTaser then
+        shouldHit = true
+    elseif cfg.ifplayerstill and target and isStanding(target) then
+        shouldHit = true
+    elseif shouldBypassHitchance(gun) then
+        shouldHit = true
+    else
+        shouldHit = rollHit(getDistanceBasedHitChance(targetPart, startPos))
+    end
 
-	local projectileCount = currentGun:GetAttribute("ProjectileCount") or 1
-	local shots = {}
+    local projectileCount = currentGun:GetAttribute("ProjectileCount") or 1
+    local shots = {}
 
-	for i = 1, projectileCount do
-		local aimPoint
-		if shouldHit then
-			aimPoint = targetPart.Position
-		else
-			if cfg.missspread > 0 then
-				aimPoint = getMissPos(startPos, targetPart)
-			else
-				return
-			end
-		end
+    for i = 1, projectileCount do
+        local aimPoint
+        if shouldHit then
+            aimPoint = targetPart.Position
+        else
+            if cfg.missspread > 0 then
+                aimPoint = getMissPos(startPos, targetPart)
+            else
+                return
+            end
+        end
 
-		local hitPart = shouldHit and targetPart or nil
-		local finalPos = aimPoint
+        local hitPart = shouldHit and targetPart or nil
+        local finalPos = aimPoint
 
-		if shouldHit then
-			if isTaser then
-				local simulatedHit, simulatedPos = simulateProjectileImpact(startPos, aimPoint, gun)
-				finalPos = simulatedPos
-				hitPart = simulatedHit or targetPart
-			elseif shotgun and cfg.shotgunnaturalspread then
-				local simulatedHit, simulatedPos = simulateProjectileImpact(startPos, aimPoint, gun)
-				finalPos = simulatedPos
-				hitPart = simulatedHit or targetPart
-			end
-		end
+        if shouldHit then
+            if isTaser then
+                local simulatedHit, simulatedPos = simulateProjectileImpact(startPos, aimPoint, gun)
+                finalPos = simulatedPos
+                hitPart = simulatedHit or targetPart
+            elseif shotgun and cfg.shotgunnaturalspread then
+                local simulatedHit, simulatedPos = simulateProjectileImpact(startPos, aimPoint, gun)
+                finalPos = simulatedPos
+                hitPart = simulatedHit or targetPart
+            end
+        end
 
-		shots[i] = {myHead.Position, finalPos, hitPart}
-		createBulletTrail(startPos, finalPos, isTaser)
-	end
+        shots[i] = {myHead.Position, finalPos, hitPart}
+        createBulletTrail(startPos, finalPos, isTaser)
+    end
 
-	ShootEvent:FireServer(shots)
-	if gun ~= currentGun or gun.Parent ~= LocalPlayer.Character then return end
+    ShootEvent:FireServer(shots)
+    if gun \~= currentGun or gun.Parent \~= LocalPlayer.Character then return end
 
-	local newAmmo = ammo - 1
-	gun:SetAttribute("Local_CurrentAmmo", newAmmo)
+    local newAmmo = ammo - 1
+    gun:SetAttribute("Local_CurrentAmmo", newAmmo)
 
-	local bulletsLabel = getBulletsLabel()
-	if bulletsLabel then
-		if sniper then
-			bulletsLabel.Text = newAmmo .. " | " .. (gun:GetAttribute("StoredAmmo") or 0)
-		else
-			bulletsLabel.Text = newAmmo .. "/" .. (gun:GetAttribute("MaxAmmo") or 30)
-		end
-	end
+    local bulletsLabel = getBulletsLabel()
+    if bulletsLabel then
+        if sniper then
+            bulletsLabel.Text = newAmmo .. " | " .. (gun:GetAttribute("StoredAmmo") or 0)
+        else
+            bulletsLabel.Text = newAmmo .. "/" .. (gun:GetAttribute("MaxAmmo") or 30)
+        end
+    end
 
-	local handle = gun:FindFirstChild("Handle")
-	if handle then
-		local shootSound = handle:FindFirstChild("ShootSound")
-		if shootSound then
-			local sound = shootSound:Clone()
-			sound.Parent = handle
-			sound:Play()
-			Debris:AddItem(sound, 2)
-		end
-	end
+    local handle = gun:FindFirstChild("Handle")
+    if handle then
+        local shootSound = handle:FindFirstChild("ShootSound")
+        if shootSound then
+            local sound = shootSound:Clone()
+            sound.Parent = handle
+            sound:Play()
+            Debris:AddItem(sound, 2)
+        end
+    end
 end
-
 
 local function getGun()
 	local char = LocalPlayer.Character
@@ -4225,4 +4289,3 @@ sections.settingsLeft:Button({
 })
 
 refreshUI()
-
