@@ -15,6 +15,9 @@ local guardsTeam = Teams:FindFirstChild("Guards")
 local inmatesTeam = Teams:FindFirstChild("Inmates")
 local criminalsTeam = Teams:FindFirstChild("Criminals")
 
+local resolveMacLibWindowGui  -- declared nil
+
+
 -- ==================== CONFIG FOLDER (needed early for whitelist) ====================
 local configFolder = "SilentAimConfigs"
 
@@ -498,7 +501,6 @@ targetLine.Visible = false
 local visuals = {container = nil}
 local espCache = {}
 local uiElements = {}
-local resolveMacLibWindowGui
 local selectedDistanceHitchancePoint = 1
 local syncingDistanceHitchanceEditor = false
 local storedAimMaxDistanceBeforeDistanceHitchance = tonumber(cfg.aimmaxdist) or 0
@@ -2309,9 +2311,14 @@ end
 local origCastRay
 local hooked = false
 
-local function setupHook()
-	local castRayFunc = filtergc("function", {Name = "castRay"}, true)
-	if not castRayFunc then return false end
+local castRayFunc
+if filtergc then
+    castRayFunc = filtergc("function", {Name = "castRay"}, true)
+else
+    -- Fallback: try to find it through other means or warn user
+    warn("filtergc not available - silent aim hook may not work")
+end
+
 
 	origCastRay = hookfunction(castRayFunc, noUpvals(function(startPos, targetPos, ...)
 		if not cfg.enabled then return origCastRay(startPos, targetPos, ...) end
@@ -2394,7 +2401,16 @@ end
 notify("Silent Aim + ESP", "Loaded! RShift = Aim, RCtrl = ESP", 5)
 
 
-local MacLib = loadstring(game:HttpGet("https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"))()
+local MacLib
+local success, err = pcall(function()
+    MacLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/biggaboy212/Maclib/main/maclib.txt"))()
+end)
+if not success or not MacLib then
+    warn("Failed to load MacLib UI: " .. tostring(err))
+    -- Provide fallback or basic UI
+    return
+end
+
 
 local Folder = "Silent Aim"
 MacLib:SetFolder(Folder)
