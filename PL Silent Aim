@@ -17,6 +17,14 @@ local criminalsTeam = Teams:FindFirstChild("Criminals")
 
 local resolveMacLibWindowGui  -- declared nil
 
+local function safeCall(fn, ...)
+    local success, err = pcall(fn, ...)
+    if not success then
+        warn("ERROR: " .. tostring(err))
+        return nil
+    end
+    return err
+end
 
 -- ==================== CONFIG FOLDER (needed early for whitelist) ====================
 local configFolder = "SilentAimConfigs"
@@ -2311,91 +2319,132 @@ end
 local origCastRay
 local hooked = false
 
-local castRayFunc
-if filtergc then
-    castRayFunc = filtergc("function", {Name = "castRay"}, true)
-else
-    -- Fallback: try to find it through other means or warn user
-    warn("filtergc not available - silent aim hook may not work")
+local function findCastRay()
+    -- Try filtergc first (old executors)
+    if filtergc then
+        local f = filtergc("function", {Name = "castRay"}, true)
+        if f then return f end
+    end
+    
+    -- Alternative: scan for the function by name/signature (more universal)
+    for _, v in ipairs(getgc(true)) do
+        if typeof(v) == "function" then
+            local success, name = pcall(debug.getinfo, v, "n")
+            if success and name and name.name == "castRay" then
+                return v
+            end
+        end
+    end
+    
+    -- Last resort: common names in Prison Life
+    local remotes = ReplicatedStorage:FindFirstChild("GunRemotes")
+    if remotes then
+        -- Sometimes it's in modules
+        for _, mod in ipairs(getgc(true)) do
+            if typeof(mod) == "function" and getfenv(mod).script then
+                local scriptName = getfenv(mod).script.Name
+                if scriptName:find("Gun") or scriptName:find("Bullet") then
+                    -- You can add more specific checks if needed
+                end
+            end
+        end
+    end
+    return nil
 end
 
+local function setupHook()
+    local castRayFunc = findCastRay()
+    if not castRayFunc then
+        warn("Could not find castRay function!")
+        return false
+    end
 
-	origCastRay = hookfunction(castRayFunc, noUpvals(function(startPos, targetPos, ...)
-		if not cfg.enabled then return origCastRay(startPos, targetPos, ...) end
+    origCastRay = hookfunction(castRayFunc, noUpvals(function(startPos, targetPos, ...)
+        if not cfg.enabled then 
+            return origCastRay(startPos, targetPos, ...) 
+        end
 
-		local closest = getClosest(cfg.fov)
+        local closest = getClosest(cfg.fov)
+        if closest and closest.Character then
+            -- ... (keep your existing hook logic here)
+            local gun = currentGun
+            if not gun then
+                return origCastRay(startPos, targetPos, ...)
+            end
+            local isTaser = isTaserGun(gun)
+            local shotgun = isShotgun(gun)
+            local sniperStable = isSniperStable(gun)
+            local shouldHit = false
+            local bypassHitchance = shouldBypassHitchance(gun)
+            local targetPart = getTargetPart(closest.Character)
 
-		if closest and closest.Character then
-			local gun = currentGun
-			if not gun then
-				return origCastRay(startPos, targetPos, ...)
-			end
-			local isTaser = isTaserGun(gun)
-			local shotgun = isShotgun(gun)
-			local sniperStable = isSniperStable(gun)
-			local shouldHit = false
-			local bypassHitchance = shouldBypassHitchance(gun)
-			local targetPart = getTargetPart(closest.Character)
+            if not targetPart then
+                return origCastRay(startPos, targetPos, ...)
+            end
 
-			if not targetPart then
-				return origCastRay(startPos, targetPos, ...)
-			end
+            if not isInCurrentGunRange(targetPart.Position, startPos) then
+                return origCastRay(startPos, targetPos, ...)
+            end
 
-			if not isInCurrentGunRange(targetPart.Position, startPos) then
-				return origCastRay(startPos, targetPos, ...)
-			end
+            if cfg.shotgungamehandled and shotgun then
+                return origCastRay(startPos, targetPart.Position, ...)
+            end
 
-			if cfg.shotgungamehandled and shotgun then
-				return origCastRay(startPos, targetPart.Position, ...)
-			end
+            if cfg.taseralwayshit and isTaser then
+                shouldHit = true
+            elseif cfg.ifplayerstill and isStanding(closest) then
+                shouldHit = true
+            elseif bypassHitchance then
+                shouldHit = true
+            else
+                shouldHit = rollHit(getDistanceBasedHitChance(targetPart, startPos))
+            end
 
-			if cfg.taseralwayshit and isTaser then
-				shouldHit = true
-			elseif cfg.ifplayerstill and isStanding(closest) then
-				shouldHit = true
-			elseif bypassHitchance then
-				shouldHit = true
-			else
-				shouldHit = rollHit(getDistanceBasedHitChance(targetPart, startPos))
-			end
+            if shouldHit then
+                if isSniper(gun) and not sniperStable then
+                    return origCastRay(startPos, targetPart.Position, ...)
+                end
+                if isTaser then
+                    return origCastRay(startPos, targetPart.Position, ...)
+                end
+                if cfg.shotgunnaturalspread and shotgun then
+                    return origCastRay(startPos, targetPart.Position, ...)
+                end
+                return targetPart, targetPart.Position
+            else
+                if cfg.missspread > 0 then
+                    local missPos = getMissPos(startPos, targetPart)
+                    return origCastRay(startPos, missPos, ...)
+                end
+                return origCastRay(startPos, targetPos, ...)
+            end
+        end
 
-			if shouldHit then
-				if isSniper(gun) and not sniperStable then
-					return origCastRay(startPos, targetPart.Position, ...)
-				end
-				if isTaser then
-					return origCastRay(startPos, targetPart.Position, ...)
-				end
-				if cfg.shotgunnaturalspread and shotgun then
-					return origCastRay(startPos, targetPart.Position, ...)
-				end
-				return targetPart, targetPart.Position
-			else
-				if cfg.missspread > 0 then
-					local missPos = getMissPos(startPos, targetPart)
-					return origCastRay(startPos, missPos, ...)
-				end
-				return origCastRay(startPos, targetPos, ...)
-			end
-		end
+        return origCastRay(startPos, targetPos, ...)
+    end))
 
-		return origCastRay(startPos, targetPos, ...)
-	end))
-
-	return true
+    return true
 end
 
+-- Setup with retry
 if not setupHook() then
-	task.spawn(function()
-		while not hooked do
-			task.wait(0.5)
-			if setupHook() then
-				hooked = true
-			end
-		end
-	end)
+    task.spawn(function()
+        local attempts = 0
+        while not hooked and attempts < 20 do
+            task.wait(0.5)
+            attempts += 1
+            if setupHook() then
+                hooked = true
+                print("Silent Aim hook successful!")
+                break
+            end
+        end
+        if not hooked then
+            warn("Failed to hook castRay after 20 attempts.")
+        end
+    end)
 else
-	hooked = true
+    hooked = true
 end
 
 notify("Silent Aim + ESP", "Loaded! RShift = Aim, RCtrl = ESP", 5)
@@ -4174,3 +4223,4 @@ sections.settingsLeft:Button({
 })
 
 refreshUI()
+
