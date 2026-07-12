@@ -128,20 +128,27 @@ local function setupPlayerTracking()
 end
 
 -- ==================== SAVE/LOAD local function saveWhitelist()
-	if not isfolder then return end
-	if not isfolder(configFolder) then makefolder(configFolder) end
-	local saveData = {
-		enabled = whitelistEnabled, 
-		mode = whitelistMode, 
-		list = getWhitelistSaveData()
-	}
-	-- FIX: Ensure no nil keys before saving
-	for i = #saveData.list, 1, -1 do
-		if not saveData.list[i].key then
-			table.remove(saveData.list, i)
-		end
-	end
-	writefile(configFolder .. "/whitelist.json", HttpService:JSONEncode(saveData))
+local function saveWhitelist()
+    if not isfolder then return end
+    if not isfolder(configFolder) then 
+        makefolder(configFolder) 
+    end
+
+    local saveData = {
+        enabled = whitelistEnabled, 
+        mode = whitelistMode, 
+        list = getWhitelistSaveData()
+    }
+
+    local list = saveData.list
+    for i = #list, 1, -1 do
+        local entry = list[i]
+        if not entry or not entry.key then
+            table.remove(list, i)
+        end
+    end
+
+    writefile(configFolder .. "/whitelist.json", HttpService:JSONEncode(saveData))
 end
 
 -- Add this RIGHT BEFORE calling loadWhitelist():
