@@ -1687,7 +1687,7 @@ local function wallBetween(startPos, endPos, targetChar)
 			remaining = remaining - hitDist - 0.05
 			if remaining <= 0 then return false end
 			currentStart = result.Position + unit * 0.05
-			 next_iteration
+		goto next_iteration
 		end
 		
 		-- Thin decorative parts don't block
@@ -1695,7 +1695,7 @@ local function wallBetween(startPos, endPos, targetChar)
 			remaining = remaining - hitDist - 0.05
 			if remaining <= 0 then return false end
 			currentStart = result.Position + unit * 0.05
-			 next_iteration
+		 goto next_iteration
 		end
 		
 		-- Check if it's actually a solid wall
@@ -2088,12 +2088,12 @@ local function autoShoot()
         return 
     end
     
-    -- FIXED: This was the error line
+    -- Check if gun is still equipped
     if not gun.Parent or gun.Parent ~= LocalPlayer.Character then 
         stopLinger()
         return 
     end
-    
+
     if not gunMatchesAutoShootWeapon(gun) then
         lastAutoTarget = nil
         stopLinger()
@@ -2120,7 +2120,7 @@ local function autoShoot()
     local targetIsValid = target and fullCheck(target)
     local targetPart = target and getTargetPart(target.Character)
 
-    -- If we have a valid target, update linger state and proceed normally
+    -- Linger logic
     if targetIsValid and targetPart then
         if target ~= lingerState.lastValidTarget then
             startLinger(target, targetPart.Position, gun)
